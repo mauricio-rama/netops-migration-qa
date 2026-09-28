@@ -1,0 +1,67 @@
+name: Data Migration Validation
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  data-validation:
+
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: netops_admin
+          POSTGRES_PASSWORD: netops_password
+          POSTGRES_DB: netops_qa
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U netops_admin -d netops_qa"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest psycopg[binary] pytest-json-report
+
+      - name: Initialize database
+        env:
+          PGPASSWORD: netops_password
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+          psql \
+            -h localhost \
+            -p 5432 \
+            -U netops_admin \
+            -d netops_qa \
+            -f sql/init_database.sql
+
+      - name: Run data migration validations
+        env:
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_NAME: netops_qa
+          DB_USER: netops_admin
+          DB_PASSWORD: netops_password
+        run: |
+          pytest -v
