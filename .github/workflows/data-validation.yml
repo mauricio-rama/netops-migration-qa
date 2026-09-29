@@ -66,6 +66,58 @@ jobs:
         run: |
           pytest -v
 
+      - name: Generate 1M synthetic records
+        run: |
+          python src/generate_test_data.py
+
+      - name: Initialize 1M source table
+        env:
+          PGPASSWORD: netops_password
+        run: |
+          psql \
+            -h localhost \
+            -p 5432 \
+            -U netops_admin \
+            -d netops_qa \
+            -c "DROP TABLE IF EXISTS source_system.customers_1m; CREATE TABLE source_system.customers_1m (customer_id BIGINT PRIMARY KEY, first_name VARCHAR(100) NOT NULL, last_name VARCHAR(100) NOT NULL, email VARCHAR(255), status VARCHAR(20) NOT NULL, created_at TIMESTAMP NOT NULL);"
+
+      - name: Load 1M records
+        env:
+          PGPASSWORD: netops_password
+        run: |
+          psql \
+            -h localhost \
+            -p 5432 \
+            -U netops_admin \
+            -d netops_qa \
+            -c "\copy source_system.customers_1m(customer_id, first_name, last_name, email, status, created_at) FROM 'data/customers_1m.csv' WITH (FORMAT csv, HEADER true)"
+
+      - name: Initialize 1M target table
+        env:
+          PGPASSWORD: netops_password
+        run: |
+          psql \
+            -h localhost \
+            -p 5432 \
+            -U netops_admin \
+            -d netops_qa \
+            -c "DROP TABLE IF EXISTS target_system.customers_1m; CREATE TABLE target_system.customers_1m (customer_id BIGINT PRIMARY KEY, full_name VARCHAR(201) NOT NULL, email VARCHAR(255), customer_status VARCHAR(20) NOT NULL, created_at TIMESTAMP NOT NULL, migration_timestamp TIMESTAMP NOT NULL);"
+
+      - name: Transform 1M records
+        env:
+          PGPASSWORD: netops_password
+        run: |
+          psql \
+            -h localhost \
+            -p 5432 \
+            -U netops_admin \
+            -d netops_qa \
+            -c "INSERT INTO target_system.customers_1m (customer_id, full_name, email, customer_status, created_at, migration_timestamp) SELECT customer_id, first_name || ' ' || last_name, email, status, created_at, CURRENT_TIMESTAMP FROM source_system.customers_1m;"
+
+      - name: Run 1M scale validation
+        run: |
+          python src/validate_scale.py
+
       - name: Generate migration quality report
         run: |
           python src/run_validation.py
