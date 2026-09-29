@@ -91,3 +91,9 @@ jobs:
         with:
           name: migration-quality-report
           path: reports/migration_quality_report.json
+
+      - name: Upload consolidated agent assessment report
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-assessment-report
+          path: reports/agent_assessment_report.json
