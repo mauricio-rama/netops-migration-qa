@@ -5,3 +5,4 @@ __pycache__/
 *.pyc
 data/*.csv
 reports/scale_validation_report.json
+reports/incremental_validation_report.json
