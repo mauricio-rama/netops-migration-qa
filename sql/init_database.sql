@@ -48,7 +48,10 @@ INSERT INTO target_system.customers
     (customer_id, full_name, email, customer_status, created_at, migration_timestamp)
 SELECT
     customer_id,
-    first_name || ' ' || last_name,
+    CASE
+    WHEN customer_id = 100002 THEN first_name || ' ' || last_name || ' XXX'
+    ELSE first_name || ' ' || last_name
+    END,
     email,
     status,
     created_at,
