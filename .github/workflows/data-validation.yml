@@ -74,6 +74,10 @@ jobs:
         run: |
           python agents/migration_validation_agent.py
 
+      - name: Run data quality investigation agent
+        run: |
+          python agents/data_quality_investigation_agent.py
+
       - name: Upload migration quality report
         uses: actions/upload-artifact@v4
         with:
