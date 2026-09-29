@@ -7,6 +7,7 @@ import pandas as pd
 
 REPORT_FILE = Path("reports/migration_quality_report.json")
 SCALE_REPORT_FILE = Path("reports/scale_validation_report.json")
+INCREMENTAL_REPORT_FILE = Path("reports/incremental_validation_report.json")
 
 
 st.set_page_config(
@@ -33,6 +34,12 @@ scale_report = None
 if SCALE_REPORT_FILE.exists():
     with open(SCALE_REPORT_FILE, "r", encoding="utf-8") as file:
         scale_report = json.load(file)
+
+incremental_report = None
+
+if INCREMENTAL_REPORT_FILE.exists():
+    with open(INCREMENTAL_REPORT_FILE, "r", encoding="utf-8") as file:
+        incremental_report = json.load(file)
 
 
 total = report["total_validations"]
@@ -162,3 +169,74 @@ if scale_report:
 
 else:
     st.info("1M scale validation report not available yet.")
+
+st.divider()
+
+st.subheader("🔄 Incremental Migration Validation")
+
+if incremental_report:
+    inserted_records = incremental_report["inserted_records"]
+
+    delta_validation = incremental_report["validations"]["delta_reconciliation"]
+    transformation_validation = incremental_report["validations"]["transformation_rules"]
+    duplicate_validation = incremental_report["validations"]["duplicate_detection"]
+    count_validation = incremental_report["validations"]["record_count_reconciliation"]
+    referential_validation = incremental_report["validations"]["referential_integrity"]
+
+    incremental_status = incremental_report["overall_status"]
+
+    col1, col2, col3, col4 = st.columns(4)
+
+    with col1:
+        st.metric(
+            "Expected Delta",
+            delta_validation["expected_delta"]
+        )
+
+    with col2:
+        st.metric(
+            "Inserted Records",
+            inserted_records
+        )
+
+    with col3:
+        st.metric(
+            "Source / Target",
+            f"{count_validation['source_count']} / {count_validation['target_count']}"
+        )
+
+    with col4:
+        st.metric(
+            "Status",
+            incremental_status
+        )
+
+    st.write("### Incremental Validation Results")
+
+    incremental_data = pd.DataFrame(
+        {
+            "Validation": [
+                "Delta Reconciliation",
+                "Transformation Rules",
+                "Duplicate Detection",
+                "Record Count Reconciliation",
+                "Referential Integrity"
+            ],
+            "Result": [
+                "PASS" if delta_validation["passed"] else "FAIL",
+                "PASS" if transformation_validation["passed"] else "FAIL",
+                "PASS" if duplicate_validation["passed"] else "FAIL",
+                "PASS" if count_validation["passed"] else "FAIL",
+                "PASS" if referential_validation["passed"] else "FAIL"
+            ]
+        }
+    )
+
+    st.dataframe(
+        incremental_data,
+        use_container_width=True,
+        hide_index=True
+    )
+
+else:
+    st.info("Incremental validation report not available yet.")
