@@ -78,6 +78,10 @@ jobs:
         run: |
           python agents/data_quality_investigation_agent.py
 
+      - name: Run migration readiness agent
+        run: |
+          python agents/migration_readiness_agent.py
+
       - name: Upload migration quality report
         uses: actions/upload-artifact@v4
         with:
