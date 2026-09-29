@@ -1,8 +1,8 @@
 import json
 from pathlib import Path
 
-
 REPORT_FILE = Path("reports/migration_quality_report.json")
+CONTEXT_FILE = Path("agents/context/agent_context.json")
 
 
 def investigate_quality():
@@ -10,10 +10,18 @@ def investigate_quality():
         print("Migration quality report not found.")
         return
 
+    if not CONTEXT_FILE.exists():
+        print("Agent context not found.")
+        return
+
     with open(REPORT_FILE, "r", encoding="utf-8") as file:
         report = json.load(file)
 
+    with open(CONTEXT_FILE, "r", encoding="utf-8") as file:
+        context = json.load(file)
+
     validations = report["validations"]
+
     failed = [
         validation
         for validation in validations
@@ -21,10 +29,16 @@ def investigate_quality():
     ]
 
     print("=== Data Quality Investigation Agent ===")
+    print(f"Project: {context['project']}")
+    print(f"Purpose: {context['purpose']}")
     print(f"Total validations: {report['total_validations']}")
     print(f"Passed: {report['passed']}")
     print(f"Failed: {report['failed']}")
     print(f"Overall status: {report['overall_status']}")
+
+    print("\nQuality dimensions:")
+    for dimension in context["quality_dimensions"]:
+        print(f"- {dimension}")
 
     if not failed:
         print("\nInvestigation result:")

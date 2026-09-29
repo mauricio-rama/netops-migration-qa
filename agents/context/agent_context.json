@@ -1,0 +1,28 @@
+{
+    "project": "NetOps Migration Quality Platform",
+    "purpose": "Data migration and transformation validation",
+    "validation_engine": {
+        "total_validations": 6,
+        "passed": 6,
+        "failed": 0,
+        "overall_status": "PASS"
+    },
+    "quality_dimensions": [
+        "accuracy",
+        "completeness",
+        "consistency",
+        "integrity",
+        "transformation_rules",
+        "referential_integrity"
+    ],
+    "agent_roles": {
+        "migration_validation_agent": "Analyze overall migration validation results",
+        "data_quality_investigation_agent": "Identify and classify data-quality issues",
+        "migration_readiness_agent": "Assess migration readiness based on validation results"
+    },
+    "decision_policy": {
+        "quality_gate": "deterministic_validation",
+        "ai_role": "analysis_and_explanation",
+        "ai_can_override_quality_gate": false
+    }
+}
