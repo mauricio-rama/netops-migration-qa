@@ -1,0 +1,22 @@
+{
+    "test_name": "1M Data Migration Benchmark",
+    "record_count": 1000000,
+    "results": {
+        "data_generation_seconds": 1.85,
+        "csv_size_mb": 82.5,
+        "source_load_records": 1000000,
+        "source_target_reconciliation_records": 1000000,
+        "source_to_target_transformation_ms": 773.623,
+        "transformation_reconciliation_ms": 1274.556,
+        "duplicate_validation_ms": 168.380
+    },
+    "validation_results": {
+        "source_count": 1000000,
+        "target_count": 1000000,
+        "transformation_errors": 0,
+        "duplicate_customer_ids": 0,
+        "mandatory_field_errors": 0,
+        "orphan_records": 0
+    },
+    "overall_status": "PASS"
+}

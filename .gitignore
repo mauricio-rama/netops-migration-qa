@@ -3,3 +3,5 @@ __pycache__/
 .pytest_cache/
 .DS_Store
 *.pyc
+data/*.csv
+reports/scale_validation_report.json
