@@ -127,3 +127,15 @@ Database Testing
 Reconciliation Testing
 CI/CD
 Quality Engineering
+
+## CI/CD Validation Evidence
+
+The project includes a GitHub Actions CI/CD pipeline that automatically initializes the PostgreSQL database and executes the data migration validation suite on every push and pull request.
+
+The pipeline was intentionally tested with a migration defect:
+
+- 🟢 Initial validation: all tests passed
+- 🔴 Intentional transformation defect: CI detected the incorrect migrated value and failed the pipeline
+- 🟢 Defect correction: CI passed again after the transformation was fixed
+
+This demonstrates automated defect detection, migration validation, and CI/CD quality gates.
