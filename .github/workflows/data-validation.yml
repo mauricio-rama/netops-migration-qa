@@ -122,6 +122,12 @@ jobs:
         run: |
           python src/validate_incremental.py
 
+      - name: Upload incremental validation report
+        uses: actions/upload-artifact@v4
+        with:
+          name: incremental-validation-report
+          path: reports/incremental_validation_report.json
+
       - name: Upload 1M scale validation report
         uses: actions/upload-artifact@v4
         with:
