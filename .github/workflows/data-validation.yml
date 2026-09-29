@@ -82,6 +82,10 @@ jobs:
         run: |
           python agents/migration_readiness_agent.py
 
+      - name: Generate consolidated agent assessment report
+        run: |
+          python agents/agent_assessment_report.py
+
       - name: Upload migration quality report
         uses: actions/upload-artifact@v4
         with:
