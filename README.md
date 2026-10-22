@@ -1,57 +1,61 @@
+
 # NetOps Migration Quality Platform
 
-**Automated Data Migration QA | ETL/ELT Validation | Data Quality | Python | SQL | PostgreSQL | Docker | CI/CD**
+**Automated Data Migration QA | ETL/ELT Validation | Data Quality | Python | SQL | PostgreSQL | Docker | CI/CD | Great Expectations**
 
-NetOps Migration Quality Platform is a portfolio project that simulates an enterprise data migration environment. It demonstrates how automated testing, SQL-based reconciliation, Python validation scripts, and quality reports can help identify data inconsistencies between source and target systems.
+NetOps Migration Quality Platform is a portfolio project that simulates an enterprise data migration environment. It demonstrates how automated testing, SQL-based reconciliation, Python validation scripts, data-quality expectations, and interactive dashboards can help identify inconsistencies between source and target systems.
 
-The project uses synthetic customer data and combines deterministic validation rules with automated test execution and AI-assisted investigation workflows.
+The project uses synthetic customer data and combines deterministic validation rules, automated test execution, incremental migration scenarios, large-scale validation, and AI-assisted investigation workflows.
 
 ## Project Overview
 
-The platform demonstrates the following data migration and quality assurance capabilities:
+The platform demonstrates:
 
 - Source-to-target record-count reconciliation
 - Data transformation validation
 - Missing-record and duplicate detection
 - Mandatory-field validation
 - Referential-integrity checks
-- Large-scale migration validation using synthetic data
+- Large-scale migration validation using 1,000,000 synthetic customer records
 - Incremental migration with timestamp watermarks
-- Automated JSON quality reports
-- pytest-based testing
+- Data-quality expectations with Great Expectations
+- Automated JSON quality reports and HTML Data Docs
+- pytest-based automated testing
 - CI/CD integration with GitHub Actions
-- AI-assisted migration analysis
-- A Streamlit dashboard for quality results
+- Streamlit dashboard for migration and quality results
+- AI-assisted migration analysis modules
 
 ## Architecture
 
 ```text
-                   SOURCE SYSTEM
-                         |
-                         v
-                   ETL / ELT FLOW
-                         |
-                         v
-                   TARGET SYSTEM
-                         |
-                         v
+                  SOURCE SYSTEM
+                       |
+                       v
+                   ETL / ELT
+                       |
+                       v
+                  TARGET SYSTEM
+                       |
+                       v
                 QA VALIDATION ENGINE
-                         |
-          +--------------+--------------+
-          |              |              |
-          v              v              v
-    Transformations  Reconciliation  Data Quality
-      Validation       Checks          Checks
-          |              |              |
-          +--------------+--------------+
-                         |
-                         v
-                MIGRATION QUALITY REPORT
-                         |
-              +----------+----------+
-              |          |          |
-              v          v          v
-           Dashboard  AI Agents    CI/CD
+                       |
+          +------------+-------------+
+          |            |             |
+          v            v             v
+    Reconciliation  Migration    Data Quality
+       Checks       Validation    Expectations
+          |            |             |
+          +------------+-------------+
+                       |
+                       v
+              QUALITY REPORTS
+                JSON + HTML
+                       |
+           +-----------+-----------+
+           |           |           |
+           v           v           v
+       Streamlit    CI/CD       AI Agents
+       Dashboard    Pipeline    (analysis)
 ```
 
 ## Validation Strategy
@@ -60,13 +64,14 @@ The platform demonstrates the following data migration and quality assurance cap
 |---|---|
 | Record-count reconciliation | Compares source and target record counts. |
 | Transformation rules | Checks whether mapped target values match expected transformations. |
-| Missing records | Identifies source records that are absent from the target. |
-| Duplicate detection | Detects repeated business keys in the target dataset. |
+| Missing-record detection | Identifies source records absent from the target. |
+| Duplicate detection | Detects repeated business keys. |
 | Mandatory fields | Checks required columns for null values. |
-| Referential integrity | Identifies target records without a matching source record. |
+| Referential integrity | Identifies records without matching references. |
 | Incremental reconciliation | Checks source and target consistency after incremental processing. |
 | Watermark management | Tracks the latest processed source timestamp. |
-| Automated reporting | Produces structured validation results in JSON format. |
+| Great Expectations | Evaluates configured data-quality expectations. |
+| Automated reporting | Produces structured JSON results and native HTML Data Docs. |
 
 ## Large-Scale Migration Validation
 
@@ -78,63 +83,125 @@ The workflow includes:
 2. Loading the data into PostgreSQL.
 3. Transforming source records into the target structure.
 4. Running migration-quality checks.
-5. Producing a validation report.
-6. Uploading reports as GitHub Actions artifacts when the configured workflow runs successfully.
+5. Generating validation reports.
+6. Uploading reports as GitHub Actions artifacts when configured workflow steps complete successfully.
 
-### Reported validation results
+### Documented scale-validation results
 
 | Metric | Result |
 |---|---:|
 | Source records | 1,000,000 |
 | Target records | 1,000,000 |
 | Transformation errors | 0 |
-| Duplicate records | 0 |
+| Duplicate customer IDs | 0 |
 | Mandatory-field errors | 0 |
 | Referential-integrity errors | 0 |
 | Overall status | PASS |
 
-These figures represent the large-scale scenario documented for this project; results depend on the dataset and the execution performed.
+These results describe the documented synthetic scenario. Results depend on the dataset and execution performed.
 
 ## Incremental Migration Validation
 
-The incremental pipeline simulates processing only source records newer than the last successfully processed timestamp, known as the **watermark**.
+The incremental pipeline simulates processing source records newer than the last successfully processed timestamp, known as the **watermark**.
 
 The workflow:
 
 1. Reads the current watermark from `migration_control`.
-2. Identifies the maximum source `updated_at` value newer than the watermark.
-3. Processes records in the incremental timestamp window.
+2. Identifies eligible source records newer than the watermark.
+3. Processes records within the incremental timestamp window.
 4. Inserts new records or updates existing target records when mapped values differ.
 5. Advances the watermark within the same database transaction.
-6. Runs reconciliation and data-quality checks.
+6. Executes reconciliation and quality checks.
 7. Generates a JSON validation report.
 
-If no newer source records exist, the loader returns zero affected records without advancing the watermark.
+If no newer source records exist, the loader can return zero affected records without advancing the watermark.
 
-### Current local validation result
-
-The latest documented local execution completed with the following results:
+### Documented local validation results
 
 | Metric | Result |
 |---|---:|
 | Source records | 9 |
 | Target records | 9 |
 | Matched records | 9 |
-| Transformation errors | 0 |
 | Duplicate customer IDs | 0 |
 | Orphan records | 0 |
-| Records affected in this execution | 0 |
+| Records affected in the execution | 0 |
 | Overall status | PASS |
 
-The zero affected-record count is expected when the watermark already covers the available source data. It demonstrates that rerunning the loader without a newer delta does not create unnecessary changes.
+Zero affected records is expected when the watermark already covers the available source data and no new changes require processing.
 
-### Incremental validation report
-
-The generated report is written to:
+Report location:
 
 `reports/incremental_validation_report.json`
 
-It contains the execution timestamp, dataset name, affected-record count, individual validation results, and overall status.
+The report contains execution information, affected-record counts, individual validation results, and the overall status.
+
+## Great Expectations — Data Quality
+
+The project integrates **Great Expectations 1.24.0** to validate the target customer table:
+
+`target_system.customers_1m`
+
+The current suite contains eight configured expectations.
+
+| # | Expectation | Column or comparison |
+|---:|---|---|
+| 1 | Values must not be null | `customer_id` |
+| 2 | Values must be unique | `customer_id` |
+| 3 | Values must not be null | `full_name` |
+| 4 | Values must not be null | `customer_status` |
+| 5 | Values must belong to an approved set | `customer_status` |
+| 6 | Values must not be null | `created_at` |
+| 7 | Values must not be null | `migration_timestamp` |
+| 8 | Column A must be greater than or equal to column B | `migration_timestamp >= created_at` |
+
+The permitted customer-status values in the current synthetic scenario are `ACTIVE` and `INACTIVE`.
+
+The timestamp expectation checks that the migration timestamp is not earlier than the creation timestamp.
+
+### Latest documented execution
+
+| Metric | Result |
+|---|---:|
+| Evaluated expectations | 8 |
+| Successful expectations | 8 |
+| Unsuccessful expectations | 0 |
+| Expectation success percentage | 100% |
+| Rows evaluated per expectation | 1,000,000 |
+| Unexpected values reported | 0 |
+| Overall status | PASS |
+
+These figures reflect the execution performed against the current synthetic dataset. The 100% score means all eight configured expectations passed; it does not imply that every possible data-quality rule has been tested.
+
+### Generated reports
+
+The validation script produces:
+
+- **JSON report:** `reports/great_expectations_report.json`
+- **HTML Data Docs:** `reports/great_expectations/index.html`
+
+The JSON report provides structured results for downstream integrations and the dashboard. HTML Data Docs provide the native Great Expectations report.
+
+## Quality Dashboard
+
+The project includes an interactive Streamlit dashboard for presenting validation results.
+
+Launch it with:
+
+```bash
+streamlit run dashboard/app.py
+```
+
+The dashboard includes:
+
+- General migration-quality metrics
+- Large-scale validation results
+- Incremental migration validation
+- Great Expectations status and expectation results
+- Quality scores and execution details
+- Download access to the Great Expectations HTML report
+
+The dashboard reads generated JSON reports. Run the relevant validation scripts to refresh their results.
 
 ## Defect Injection Testing
 
@@ -145,16 +212,16 @@ The framework is designed to detect migration and data-quality defects such as:
 - Duplicate business keys
 - Null values in mandatory fields
 - Referential-integrity violations
+- Unsupported customer-status values
+- Invalid timestamp relationships
 
-When a defect violates an implemented validation rule, the corresponding check should fail and report the discrepancy.
+A useful QA workflow is to introduce a controlled defect, execute the relevant validation, confirm that the defect is detected, correct the data or transformation, and rerun the checks.
 
-A useful QA workflow is to introduce a controlled defect, execute the relevant tests, confirm that the defect is detected, correct the data or transformation, and rerun the validation.
-
-Test outcomes depend on the specific scenario and validation rules executed.
+Actual detection depends on the validation rules configured for each scenario.
 
 ## AI-Assisted Validation
 
-The project includes AI-oriented agent modules intended to support analysis and investigation of migration-quality results.
+The project contains AI-oriented agent modules intended to support analysis and investigation of migration-quality results.
 
 ### Migration Validation Agent
 
@@ -171,37 +238,27 @@ Uses validation evidence to produce a structured readiness assessment.
 The intended separation of responsibilities is:
 
 ```text
-Deterministic SQL / Python Validations
-                  |
-                  v
-             PASS / FAIL
-                  |
-                  v
-               AI Agents
-                  |
-                  v
-       Analysis and Investigation
+Deterministic SQL / Python / GX Validations
+                     |
+                     v
+                  PASS / FAIL
+                     |
+                     v
+                  AI Agents
+                     |
+                     v
+          Analysis and Investigation
 ```
 
-**Design principle:** deterministic SQL and Python checks remain the source of truth for data-quality pass/fail decisions. AI-generated analysis is intended to support investigation and interpretation, not override a failed validation.
+**Design principle:** deterministic validation results remain the source of truth for pass/fail decisions. AI-generated analysis supports investigation and interpretation; it should not override a failed validation.
 
-## Quality Dashboard
-
-The project includes a Streamlit dashboard for presenting migration-quality results.
-
-Start the dashboard locally with:
-
-```bash
-streamlit run dashboard/app.py
-```
-
-The displayed sections depend on the reports and data available to the dashboard. The intended coverage includes migration status, large-scale validation, incremental validation, record counts, transformations, duplicates, mandatory fields, and referential integrity.
+An MCP integration for exposing validation capabilities to an AI agent is a planned enhancement, not a claim that the MCP server is already implemented.
 
 ## CI/CD Pipeline
 
-GitHub Actions is configured to automate the project's validation workflow.
+GitHub Actions is configured to automate validation workflows.
 
-The documented pipeline covers activities such as:
+The project workflow includes activities such as:
 
 - PostgreSQL service initialization
 - Database schema initialization
@@ -212,16 +269,16 @@ The documented pipeline covers activities such as:
 - JSON report generation
 - Artifact upload
 
-The exact steps executed depend on the current workflow configuration in `.github/workflows/data-validation.yml`.
+The exact steps executed depend on the workflow configuration in `.github/workflows/data-validation.yml`.
 
 ## Technology Stack
 
 ### Programming and testing
 
 - Python
+- SQL
 - pytest
 - psycopg
-- SQL
 
 ### Database and infrastructure
 
@@ -229,24 +286,29 @@ The exact steps executed depend on the current workflow configuration in `.githu
 - Docker
 - Docker Compose
 
+### Data quality and reporting
+
+- Great Expectations 1.24.0
+- JSON reporting
+- Great Expectations HTML Data Docs
+
+### Dashboard and data analysis
+
+- Streamlit
+- pandas
+
 ### CI/CD and version control
 
 - Git
 - GitHub
 - GitHub Actions
 
-### Dashboard and data analysis
+### AI-assisted analysis
 
-- Streamlit
-- Pandas
+- Python-based migration and data-quality agent modules
+- MCP integration planned for a future iteration
 
-### Data quality and AI-assisted analysis
-
-- Source-to-target reconciliation
-- Transformation validation
-- Incremental processing with watermarks
-- JSON reporting
-- Migration analysis and investigation agents
+**Dependency note:** SQLAlchemy is used by Great Expectations' PostgreSQL datasource integration through its SQL connection layer. The project uses pandas in the Streamlit dashboard to structure and display validation reports.
 
 ## Project Structure
 
@@ -265,6 +327,12 @@ netops-migration-qa/
 ├── data/
 ├── docker/
 ├── reports/
+│   ├── evidence/
+│   ├── great_expectations/
+│   ├── great_expectations_report.json
+│   ├── incremental_validation_report.json
+│   ├── migration_quality_report.json
+│   └── scale_validation_report.json
 ├── sql/
 │   ├── init_database.sql
 │   └── incremental_migration.sql
@@ -272,7 +340,9 @@ netops-migration-qa/
 │   ├── run_validation.py
 │   ├── generate_test_data.py
 │   ├── validate_scale.py
-│   └── validate_incremental.py
+│   ├── validate_incremental.py
+│   ├── validate_with_gx.py
+│   └── setup_incremental_ci.py
 ├── tests/
 │   └── test_customer_migration.py
 ├── docker-compose.yml
@@ -286,10 +356,10 @@ Additional files may exist in the repository.
 
 ### Prerequisites
 
-- Python installed
+- Python
 - Docker and Docker Compose
 - Git
-- A local Python virtual environment with the project dependencies installed
+- Project dependencies installed in a Python virtual environment
 
 ### 1. Start PostgreSQL
 
@@ -297,7 +367,7 @@ Additional files may exist in the repository.
 docker compose up -d
 ```
 
-Check the container status:
+Verify the container:
 
 ```bash
 docker compose ps
@@ -311,26 +381,26 @@ On macOS or Linux:
 source .venv/bin/activate
 ```
 
-### 3. Run the automated test suite
+### 3. Run automated tests
 
 ```bash
 pytest -v
 ```
 
-### 4. Run the standard migration validation
+### 4. Run standard migration validation
 
 ```bash
 python src/run_validation.py
 ```
 
-### 5. Run the large-scale validation scenario
+### 5. Run large-scale validation
 
 ```bash
 python src/generate_test_data.py
 python src/validate_scale.py
 ```
 
-Review the output and generated reports after execution.
+Review the generated output and reports.
 
 ### 6. Run incremental migration validation
 
@@ -338,11 +408,19 @@ Review the output and generated reports after execution.
 python src/validate_incremental.py
 ```
 
-This command processes the current incremental scenario and writes the report to `reports/incremental_validation_report.json`.
+This command runs the incremental scenario and writes its report to `reports/incremental_validation_report.json`.
 
-**Important:** the incremental script expects the source and target tables and the `migration_control` watermark record to exist already. The helper function `setup_incremental_scenario()` resets the demo tables and data; it is not called automatically by the normal execution path. Do not call that helper against data you need to preserve.
+**Important:** the incremental script expects the source and target tables and the `migration_control` watermark record to exist already. The helper `setup_incremental_scenario()` resets demo tables and data; it is not called automatically by the normal execution path. Do not call that helper against data you need to preserve.
 
-### 7. Launch the dashboard
+### 7. Run Great Expectations data-quality validation
+
+```bash
+python src/validate_with_gx.py
+```
+
+This runs the configured expectations against `target_system.customers_1m` and generates the JSON report and HTML Data Docs.
+
+### 8. Launch the dashboard
 
 ```bash
 streamlit run dashboard/app.py
@@ -352,34 +430,41 @@ streamlit run dashboard/app.py
 
 ### Incremental validation
 
-The latest documented local execution returned:
-
 ```text
-Source records:            9
-Target records:            9
-Matched records:           9
-Transformation errors:     0
-Duplicate customer IDs:    0
-Orphan records:            0
-Affected records:          0
+Source records:             9
+Target records:             9
+Matched records:            9
+Duplicate customer IDs:     0
+Orphan records:             0
+Affected records:           0
 Overall status:             PASS
 ```
 
 ### Large-scale validation
 
-The documented million-record scenario returned:
-
 ```text
-Source records:            1,000,000
-Target records:            1,000,000
-Transformation errors:     0
-Duplicate records:         0
-Mandatory-field errors:    0
+Source records:             1,000,000
+Target records:             1,000,000
+Transformation errors:      0
+Duplicate records:          0
+Mandatory-field errors:     0
 Referential-integrity errors: 0
-Overall status:            PASS
+Overall status:             PASS
 ```
 
-Results may differ depending on the current database state, test data, and execution scenario.
+### Great Expectations
+
+```text
+Evaluated expectations:     8
+Successful expectations:    8
+Unsuccessful expectations:  0
+Success percentage:         100%
+Rows evaluated per rule:    1,000,000
+Unexpected values:          0
+Overall status:             PASS
+```
+
+Results can differ depending on the database state, test data, and execution scenario.
 
 ## Skills Demonstrated
 
@@ -393,28 +478,31 @@ Results may differ depending on the current database state, test data, and execu
 - Mandatory-field validation
 - Referential-integrity testing
 - Incremental migration and watermark management
+- Great Expectations
 - Python test automation
 - pytest
 - PostgreSQL
 - Docker and Docker Compose
 - CI/CD quality gates
-- Automated JSON reporting
-- Dashboard development
+- JSON and HTML reporting
+- Streamlit dashboard development
+- pandas-based report presentation
 - AI-assisted quality investigation
 
 ## Future Roadmap
 
-Potential future enhancements include:
+Potential enhancements include:
 
+- MCP server exposing migration-validation tools
+- AI agent that queries validation results and explains failures
+- Controlled defect injection and recovery demonstrations
+- Additional business-rule and data-quality expectations
+- Environment-based database configuration
+- More extensive automated regression coverage
 - Cloud object storage integration
 - Azure Data Factory integration
 - Managed PostgreSQL deployment
-- Additional batch migration scenarios
 - Real-time migration simulation
-- Expanded data-quality rules
-- Environment-based database configuration
-- More extensive automated regression coverage
-- Expanded AI-agent workflows
 - Cloud deployment of the dashboard
 
 These items are roadmap ideas and should not be considered implemented until they are added and verified.
