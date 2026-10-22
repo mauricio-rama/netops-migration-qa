@@ -1,7 +1,12 @@
 import os
+import sys
+from pathlib import Path
 
-from src.validate_incremental import setup_incremental_scenario
 import psycopg
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from validate_incremental import setup_incremental_scenario
 
 
 def main():
