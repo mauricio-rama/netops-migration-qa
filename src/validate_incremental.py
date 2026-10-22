@@ -15,10 +15,13 @@ DB_CONFIG = {
 
 OUTPUT_FILE = Path("reports/incremental_validation_report.json")
 
+
 def get_connection():
     return psycopg.connect(**DB_CONFIG)
 
+
 def setup_incremental_scenario(conn):
+    """Reinicia los datos de demostración solo cuando se solicita explícitamente."""
     with conn.cursor() as cur:
         cur.execute("""
             DROP TABLE IF EXISTS target_system.customers_incremental;
@@ -72,7 +75,8 @@ def setup_incremental_scenario(conn):
 
         cur.execute("""
             INSERT INTO target_system.customers_incremental
-                (customer_id, full_name, email, customer_status, updated_at, migration_timestamp)
+                (customer_id, full_name, email, customer_status,
+                 updated_at, migration_timestamp)
             SELECT
                 customer_id,
                 first_name || ' ' || last_name,
@@ -86,11 +90,40 @@ def setup_incremental_scenario(conn):
 
     conn.commit()
 
+
 def run_incremental_load(conn):
-    with conn.cursor() as cur:
-        cur.execute("""
-            INSERT INTO target_system.customers_incremental
-                (
+    """Carga registros nuevos o actualizados posteriores al watermark."""
+    with conn.transaction():
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT last_processed_timestamp
+                FROM migration_control
+                WHERE pipeline_name = 'customer_incremental'
+                FOR UPDATE;
+            """)
+
+            row = cur.fetchone()
+
+            if row is None:
+                raise RuntimeError(
+                    "No existe el watermark de customer_incremental"
+                )
+
+            last_watermark = row[0]
+
+            cur.execute("""
+                SELECT MAX(updated_at)
+                FROM source_system.customers_incremental
+                WHERE updated_at > %s;
+            """, (last_watermark,))
+
+            new_watermark = cur.fetchone()[0]
+
+            if new_watermark is None:
+                return 0
+
+            cur.execute("""
+                INSERT INTO target_system.customers_incremental (
                     customer_id,
                     full_name,
                     email,
@@ -98,61 +131,129 @@ def run_incremental_load(conn):
                     updated_at,
                     migration_timestamp
                 )
-            SELECT
-                s.customer_id,
-                s.first_name || ' ' || s.last_name,
-                s.email,
-                s.status,
-                s.updated_at,
-                CURRENT_TIMESTAMP
-            FROM source_system.customers_incremental s
-            CROSS JOIN migration_control m
-            WHERE m.pipeline_name = 'customer_incremental'
-              AND s.updated_at > m.last_processed_timestamp;
-        """)
+                SELECT
+                    s.customer_id,
+                    s.first_name || ' ' || s.last_name,
+                    s.email,
+                    s.status,
+                    s.updated_at,
+                    CURRENT_TIMESTAMP
+                FROM source_system.customers_incremental s
+                WHERE s.updated_at > %s
+                  AND s.updated_at <= %s
+                ON CONFLICT (customer_id) DO UPDATE SET
+                    full_name = EXCLUDED.full_name,
+                    email = EXCLUDED.email,
+                    customer_status = EXCLUDED.customer_status,
+                    updated_at = EXCLUDED.updated_at,
+                    migration_timestamp = CURRENT_TIMESTAMP
+                WHERE target_system.customers_incremental.updated_at
+                      IS DISTINCT FROM EXCLUDED.updated_at
+                   OR target_system.customers_incremental.full_name
+                      IS DISTINCT FROM EXCLUDED.full_name
+                   OR target_system.customers_incremental.email
+                      IS DISTINCT FROM EXCLUDED.email
+                   OR target_system.customers_incremental.customer_status
+                      IS DISTINCT FROM EXCLUDED.customer_status;
+            """, (last_watermark, new_watermark))
 
-        inserted_records = cur.rowcount
+            affected_records = cur.rowcount
 
-    conn.commit()
-    return inserted_records
+            cur.execute("""
+                UPDATE migration_control
+                SET last_processed_timestamp = %s
+                WHERE pipeline_name = 'customer_incremental';
+            """, (new_watermark,))
+
+    return affected_records
+
 
 def validate_delta_count(conn, inserted_records):
     with conn.cursor() as cur:
         cur.execute("""
             SELECT COUNT(*)
             FROM source_system.customers_incremental s
-            CROSS JOIN migration_control m
-            WHERE m.pipeline_name = 'customer_incremental'
-              AND s.updated_at > m.last_processed_timestamp;
+            JOIN target_system.customers_incremental t
+                ON s.customer_id = t.customer_id
+            WHERE s.updated_at <= (
+                SELECT last_processed_timestamp
+                FROM migration_control
+                WHERE pipeline_name = 'customer_incremental'
+            );
         """)
 
-        delta_count = cur.fetchone()[0]
+        processed_records = cur.fetchone()[0]
+
+        cur.execute("""
+            SELECT COUNT(*)
+            FROM source_system.customers_incremental;
+        """)
+        source_records = cur.fetchone()[0]
+
+        cur.execute("""
+            SELECT COUNT(*)
+            FROM target_system.customers_incremental;
+        """)
+        target_records = cur.fetchone()[0]
 
     return {
-        "expected_delta": delta_count,
+        "source_records": source_records,
+        "target_records": target_records,
+        "processed_records": processed_records,
         "inserted_records": inserted_records,
-        "passed": inserted_records == delta_count
+        "passed": source_records == target_records
     }
+
 
 def validate_transformations(conn):
     with conn.cursor() as cur:
         cur.execute("""
-            SELECT COUNT(*)
+            SELECT
+                COUNT(*) FILTER (
+                    WHERE s.first_name || ' ' || s.last_name
+                          IS DISTINCT FROM t.full_name
+                ) AS name_errors,
+                COUNT(*) FILTER (
+                    WHERE s.email IS DISTINCT FROM t.email
+                ) AS email_errors,
+                COUNT(*) FILTER (
+                    WHERE s.status IS DISTINCT FROM t.customer_status
+                ) AS status_errors,
+                COUNT(*) FILTER (
+                    WHERE s.updated_at IS DISTINCT FROM t.updated_at
+                ) AS timestamp_errors,
+                COUNT(*) AS matched_records
             FROM source_system.customers_incremental s
             JOIN target_system.customers_incremental t
-                ON s.customer_id = t.customer_id
-            CROSS JOIN migration_control m
-            WHERE m.pipeline_name = 'customer_incremental'
-              AND s.updated_at > m.last_processed_timestamp
-              AND s.first_name || ' ' || s.last_name <> t.full_name;
+                ON s.customer_id = t.customer_id;
         """)
 
-        transformation_errors = cur.fetchone()[0]
+        row = cur.fetchone()
+        (
+            name_errors,
+            email_errors,
+            status_errors,
+            timestamp_errors,
+            matched_records
+        ) = row
+
+    total_errors = (
+        name_errors
+        + email_errors
+        + status_errors
+        + timestamp_errors
+    )
 
     return {
-        "transformation_errors": transformation_errors,
-        "passed": transformation_errors == 0
+        "matched_records": matched_records,
+        "name_errors": name_errors,
+        "email_errors": email_errors,
+        "status_errors": status_errors,
+        "timestamp_errors": timestamp_errors,
+        "transformation_errors": total_errors,
+        "passed": matched_records > 0 and total_errors == 0
     }
+
 
 def validate_duplicates(conn):
     with conn.cursor() as cur:
@@ -173,6 +274,7 @@ def validate_duplicates(conn):
         "passed": duplicate_ids == 0
     }
 
+
 def validate_record_counts(conn):
     with conn.cursor() as cur:
         cur.execute("""
@@ -191,6 +293,7 @@ def validate_record_counts(conn):
         "passed": source_count == target_count
     }
 
+
 def validate_referential_integrity(conn):
     with conn.cursor() as cur:
         cur.execute("""
@@ -208,23 +311,16 @@ def validate_referential_integrity(conn):
         "passed": orphan_records == 0
     }
 
-def main():
-    with get_connection() as conn:
-        setup_incremental_scenario(conn)
 
+def main():
+    # No reinicia las tablas: ejecuta la carga sobre los datos existentes.
+    with get_connection() as conn:
         inserted_records = run_incremental_load(conn)
 
-        delta_validation = validate_delta_count(
-            conn,
-            inserted_records
-        )
-
+        delta_validation = validate_delta_count(conn, inserted_records)
         transformation_validation = validate_transformations(conn)
-
         duplicate_validation = validate_duplicates(conn)
-
         count_validation = validate_record_counts(conn)
-
         referential_validation = validate_referential_integrity(conn)
 
     validations = {
@@ -250,7 +346,6 @@ def main():
     }
 
     OUTPUT_FILE.parent.mkdir(parents=True, exist_ok=True)
-
     OUTPUT_FILE.write_text(
         json.dumps(report, indent=4),
         encoding="utf-8"
