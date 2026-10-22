@@ -118,6 +118,16 @@ jobs:
         run: |
           python src/validate_scale.py
 
+      - name: Initialize incremental migration scenario
+        env:
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_NAME: netops_qa
+          DB_USER: netops_admin
+          DB_PASSWORD: netops_password
+        run: |
+          python src/setup_incremental_ci.py
+
       - name: Run incremental migration validation
         run: |
           python src/validate_incremental.py
