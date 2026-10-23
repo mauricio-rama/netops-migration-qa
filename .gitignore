@@ -10,3 +10,6 @@ reports/scale_validation_report.json
 reports/incremental_validation_report.json
 reports/great_expectations_report.json
 reports/great_expectations/
+
+# Environment variables and API secrets
+.env
