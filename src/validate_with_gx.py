@@ -14,7 +14,29 @@ DATABASE_URL = (
 REPORTS_DIR = Path("reports/great_expectations").resolve()
 JSON_REPORT_FILE = Path("reports/great_expectations_report.json")
 
-TABLE_NAME = "target_system.customers_1m"
+
+def build_expectation_results(result, table_name):
+    """Convert Great Expectations results into dashboard-friendly data."""
+    expectation_results = []
+
+    for item in result.results:
+        details = item.result or {}
+        kwargs = item.expectation_config.kwargs
+
+        expectation_results.append(
+            {
+                "table": table_name,
+                "expectation_type": item.expectation_config.type,
+                "column": kwargs.get("column"),
+                "column_A": kwargs.get("column_A"),
+                "column_B": kwargs.get("column_B"),
+                "success": item.success,
+                "element_count": details.get("element_count"),
+                "unexpected_count": details.get("unexpected_count"),
+            }
+        )
+
+    return expectation_results
 
 
 def main():
@@ -43,72 +65,67 @@ def main():
         connection_string=DATABASE_URL,
     )
 
-    asset = datasource.add_table_asset(
+    # --------------------------------------------------------
+    # 1. Validate the 1-million-record destination table
+    # --------------------------------------------------------
+    target_asset = datasource.add_table_asset(
         name="target_customers_1m",
         table_name="customers_1m",
         schema_name="target_system",
     )
 
-    batch_definition = asset.add_batch_definition_whole_table(
+    target_batch = target_asset.add_batch_definition_whole_table(
         name="target_customers_1m_batch",
     )
 
-    suite = gx.ExpectationSuite(
+    target_suite = gx.ExpectationSuite(
         name="target_customer_quality_suite",
     )
 
-    # 1. Customer ID must not be null.
-    suite.add_expectation(
+    target_suite.add_expectation(
         gx.expectations.ExpectColumnValuesToNotBeNull(
             column="customer_id",
         )
     )
 
-    # 2. Customer ID must be unique.
-    suite.add_expectation(
+    target_suite.add_expectation(
         gx.expectations.ExpectColumnValuesToBeUnique(
             column="customer_id",
         )
     )
 
-    # 3. Full name must not be null.
-    suite.add_expectation(
+    target_suite.add_expectation(
         gx.expectations.ExpectColumnValuesToNotBeNull(
             column="full_name",
         )
     )
 
-    # 4. Customer status must not be null.
-    suite.add_expectation(
+    target_suite.add_expectation(
         gx.expectations.ExpectColumnValuesToNotBeNull(
             column="customer_status",
         )
     )
 
-    # 5. Creation timestamp must not be null.
-    suite.add_expectation(
+    target_suite.add_expectation(
         gx.expectations.ExpectColumnValuesToNotBeNull(
             column="created_at",
         )
     )
 
-    # 6. Migration timestamp must not be null.
-    suite.add_expectation(
+    target_suite.add_expectation(
         gx.expectations.ExpectColumnValuesToNotBeNull(
             column="migration_timestamp",
         )
     )
 
-    # 7. Customer status must belong to the approved set.
-    suite.add_expectation(
+    target_suite.add_expectation(
         gx.expectations.ExpectColumnValuesToBeInSet(
             column="customer_status",
             value_set=["ACTIVE", "INACTIVE"],
         )
     )
 
-    # 8. Migration timestamp must be >= creation timestamp.
-    suite.add_expectation(
+    target_suite.add_expectation(
         gx.expectations.ExpectColumnPairValuesAToBeGreaterThanB(
             column_A="migration_timestamp",
             column_B="created_at",
@@ -116,46 +133,102 @@ def main():
         )
     )
 
-    context.suites.add(suite)
+    context.suites.add(target_suite)
 
-    validation = gx.ValidationDefinition(
+    target_validation = gx.ValidationDefinition(
         name="target_customer_quality_validation",
-        data=batch_definition,
-        suite=suite,
+        data=target_batch,
+        suite=target_suite,
     )
 
-    context.validation_definitions.add(validation)
+    context.validation_definitions.add(target_validation)
+    target_result = target_validation.run()
 
-    result = validation.run()
+    # --------------------------------------------------------
+    # 2. Validate customer_id uniqueness in the staging table
+    # --------------------------------------------------------
+    staging_asset = datasource.add_table_asset(
+        name="customers_staging",
+        table_name="customers_staging",
+        schema_name="source_system",
+    )
+
+    staging_batch = staging_asset.add_batch_definition_whole_table(
+        name="customers_staging_batch",
+    )
+
+    staging_suite = gx.ExpectationSuite(
+        name="customers_staging_quality_suite",
+    )
+
+    staging_suite.add_expectation(
+        gx.expectations.ExpectColumnValuesToBeUnique(
+            column="customer_id",
+        )
+    )
+
+    context.suites.add(staging_suite)
+
+    staging_validation = gx.ValidationDefinition(
+        name="customers_staging_quality_validation",
+        data=staging_batch,
+        suite=staging_suite,
+    )
+
+    context.validation_definitions.add(staging_validation)
+    staging_result = staging_validation.run()
+
+    # --------------------------------------------------------
+    # 3. Consolidate both table results
+    # --------------------------------------------------------
+    all_expectations = (
+        build_expectation_results(
+            target_result,
+            "target_system.customers_1m",
+        )
+        + build_expectation_results(
+            staging_result,
+            "source_system.customers_staging",
+        )
+    )
+
+    overall_success = target_result.success and staging_result.success
 
     docs = context.build_data_docs(site_names=["local_site"])
     html_report = docs["local_site"]
 
-    expectation_results = []
-
-    for item in result.results:
-        details = item.result or {}
-        kwargs = item.expectation_config.kwargs
-
-        expectation_results.append(
-            {
-                "expectation_type": item.expectation_config.type,
-                "column": kwargs.get("column"),
-                "column_A": kwargs.get("column_A"),
-                "column_B": kwargs.get("column_B"),
-                "success": item.success,
-                "element_count": details.get("element_count"),
-                "unexpected_count": details.get("unexpected_count"),
-            }
-        )
-
     report = {
         "execution_timestamp": datetime.now(timezone.utc).isoformat(),
-        "table": TABLE_NAME,
-        "overall_status": "PASS" if result.success else "FAIL",
-        "success": result.success,
-        "statistics": result.statistics,
-        "expectations": expectation_results,
+        "table": "Multiple tables",
+        "overall_status": "PASS" if overall_success else "FAIL",
+        "success": overall_success,
+        "statistics": {
+            "evaluated_expectations": len(all_expectations),
+            "successful_expectations": sum(
+                item["success"] for item in all_expectations
+            ),
+            "unsuccessful_expectations": sum(
+                not item["success"] for item in all_expectations
+            ),
+            "success_percent": (
+                sum(item["success"] for item in all_expectations)
+                / len(all_expectations)
+                * 100
+                if all_expectations
+                else 0
+            ),
+        },
+        "table_results": {
+            "target_system.customers_1m": {
+                "success": target_result.success,
+                "statistics": target_result.statistics,
+            },
+            "source_system.customers_staging": {
+                "success": staging_result.success,
+                "statistics": staging_result.statistics,
+            },
+        },
+        "expectations": all_expectations,
         "html_report": html_report,
     }
 
@@ -164,33 +237,34 @@ def main():
         encoding="utf-8",
     )
 
-    print("\n=== GREAT EXPECTATIONS: DATA QUALITY ===")
-    print(f"Table: {TABLE_NAME}")
+    print("\n=== GREAT EXPECTATIONS: CONSOLIDATED DATA QUALITY ===")
     print(f"Overall status: {report['overall_status']}")
-    print(f"Statistics: {result.statistics}")
 
-    for expectation in expectation_results:
-        status = "PASS" if expectation["success"] else "FAIL"
+    for table_name, table_result in report["table_results"].items():
+        print(
+            f"\nTable: {table_name} | "
+            f"Status: {'PASS' if table_result['success'] else 'FAIL'}"
+        )
 
-        column_description = expectation["column"]
+    for item in all_expectations:
+        status = "PASS" if item["success"] else "FAIL"
+        column = item["column"]
 
-        if expectation["column_A"] and expectation["column_B"]:
-            column_description = (
-                f"{expectation['column_A']} >= "
-                f"{expectation['column_B']}"
-            )
+        if item["column_A"] and item["column_B"]:
+            column = f"{item['column_A']} >= {item['column_B']}"
 
         print(
-            f"[{status}] {expectation['expectation_type']} "
-            f"| Column: {column_description} "
-            f"| Evaluated: {expectation['element_count']} "
-            f"| Unexpected: {expectation['unexpected_count']}"
+            f"[{status}] {item['expectation_type']} "
+            f"| Table: {item['table']} "
+            f"| Column: {column} "
+            f"| Evaluated: {item['element_count']} "
+            f"| Unexpected: {item['unexpected_count']}"
         )
 
     print(f"\nHTML report: {html_report}")
     print(f"JSON report: {JSON_REPORT_FILE}")
 
-    if not result.success:
+    if not overall_success:
         raise SystemExit(1)
 
 

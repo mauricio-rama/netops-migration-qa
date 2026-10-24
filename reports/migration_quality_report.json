@@ -1,33 +1,145 @@
 {
-    "execution_timestamp": "2026-10-22T09:41:18.985996",
-    "total_validations": 6,
-    "passed": 6,
-    "failed": 0,
-    "overall_status": "PASS",
-    "validations": [
-        {
-            "name": "test_customer_full_name_transformation",
-            "status": "PASSED"
-        },
-        {
-            "name": "test_customer_record_count_reconciliation",
-            "status": "PASSED"
-        },
-        {
-            "name": "test_customer_missing_records",
-            "status": "PASSED"
-        },
-        {
-            "name": "test_customer_duplicate_records",
-            "status": "PASSED"
-        },
-        {
-            "name": "test_customer_mandatory_fields",
-            "status": "PASSED"
-        },
-        {
-            "name": "test_customer_referential_integrity",
-            "status": "PASSED"
-        }
-    ]
+  "execution_timestamp": "2026-10-24T17:55:00.889150+00:00",
+  "overall_status": "PASS",
+  "total_validations": 15,
+  "passed": 15,
+  "failed": 0,
+  "quality_score": 100.0,
+  "validator_summaries": {
+    "Pytest": {
+      "status": "PASS",
+      "passed": 6,
+      "failed": 0,
+      "total": 6
+    },
+    "Great Expectations": {
+      "status": "PASS",
+      "passed": 9,
+      "failed": 0,
+      "total": 9
+    }
+  },
+  "command_results": {
+    "Pytest": {
+      "returncode": 0,
+      "error": null
+    },
+    "Great Expectations": {
+      "returncode": 0,
+      "error": null
+    }
+  },
+  "validations": [
+    {
+      "name": "test_customer_full_name_transformation",
+      "validator": "Pytest",
+      "status": "PASS"
+    },
+    {
+      "name": "test_customer_record_count_reconciliation",
+      "validator": "Pytest",
+      "status": "PASS"
+    },
+    {
+      "name": "test_customer_missing_records",
+      "validator": "Pytest",
+      "status": "PASS"
+    },
+    {
+      "name": "test_customer_duplicate_records",
+      "validator": "Pytest",
+      "status": "PASS"
+    },
+    {
+      "name": "test_customer_mandatory_fields",
+      "validator": "Pytest",
+      "status": "PASS"
+    },
+    {
+      "name": "test_customer_referential_integrity",
+      "validator": "Pytest",
+      "status": "PASS"
+    },
+    {
+      "name": "expect_column_values_to_not_be_null",
+      "validator": "Great Expectations",
+      "status": "PASS",
+      "table": "target_system.customers_1m",
+      "column": "customer_id",
+      "records_evaluated": 1000000,
+      "unexpected_values": 0
+    },
+    {
+      "name": "expect_column_values_to_be_unique",
+      "validator": "Great Expectations",
+      "status": "PASS",
+      "table": "target_system.customers_1m",
+      "column": "customer_id",
+      "records_evaluated": 1000000,
+      "unexpected_values": 0
+    },
+    {
+      "name": "expect_column_values_to_not_be_null",
+      "validator": "Great Expectations",
+      "status": "PASS",
+      "table": "target_system.customers_1m",
+      "column": "full_name",
+      "records_evaluated": 1000000,
+      "unexpected_values": 0
+    },
+    {
+      "name": "expect_column_values_to_not_be_null",
+      "validator": "Great Expectations",
+      "status": "PASS",
+      "table": "target_system.customers_1m",
+      "column": "customer_status",
+      "records_evaluated": 1000000,
+      "unexpected_values": 0
+    },
+    {
+      "name": "expect_column_values_to_be_in_set",
+      "validator": "Great Expectations",
+      "status": "PASS",
+      "table": "target_system.customers_1m",
+      "column": "customer_status",
+      "records_evaluated": 1000000,
+      "unexpected_values": 0
+    },
+    {
+      "name": "expect_column_values_to_not_be_null",
+      "validator": "Great Expectations",
+      "status": "PASS",
+      "table": "target_system.customers_1m",
+      "column": "created_at",
+      "records_evaluated": 1000000,
+      "unexpected_values": 0
+    },
+    {
+      "name": "expect_column_values_to_not_be_null",
+      "validator": "Great Expectations",
+      "status": "PASS",
+      "table": "target_system.customers_1m",
+      "column": "migration_timestamp",
+      "records_evaluated": 1000000,
+      "unexpected_values": 0
+    },
+    {
+      "name": "expect_column_pair_values_a_to_be_greater_than_b",
+      "validator": "Great Expectations",
+      "status": "PASS",
+      "table": "target_system.customers_1m",
+      "column": "migration_timestamp >= created_at",
+      "records_evaluated": 1000000,
+      "unexpected_values": 0
+    },
+    {
+      "name": "expect_column_values_to_be_unique",
+      "validator": "Great Expectations",
+      "status": "PASS",
+      "table": "source_system.customers_staging",
+      "column": "customer_id",
+      "records_evaluated": 6,
+      "unexpected_values": 0
+    }
+  ]
 }

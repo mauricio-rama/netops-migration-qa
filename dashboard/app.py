@@ -1,8 +1,8 @@
 
 import json
-from pathlib import Path
-
+import subprocess
 import sys
+from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
@@ -17,11 +17,17 @@ import streamlit as st
 # CONFIGURATION
 # ============================================================
 
-REPORT_FILE = Path("reports/migration_quality_report.json")
-SCALE_REPORT_FILE = Path("reports/scale_validation_report.json")
-INCREMENTAL_REPORT_FILE = Path("reports/incremental_validation_report.json")
-GX_REPORT_FILE = Path("reports/great_expectations_report.json")
-GX_HTML_FILE = Path("reports/great_expectations/index.html")
+REPORT_FILE = PROJECT_ROOT / "reports/migration_quality_report.json"
+SCALE_REPORT_FILE = PROJECT_ROOT / "reports/scale_validation_report.json"
+INCREMENTAL_REPORT_FILE = (
+    PROJECT_ROOT / "reports/incremental_validation_report.json"
+)
+GX_REPORT_FILE = PROJECT_ROOT / "reports/great_expectations_report.json"
+GX_HTML_FILE = PROJECT_ROOT / "reports/great_expectations/index.html"
+
+COPYRIGHT_YEAR = 2026
+PROJECT_NAME = "NetOps Migration QA"
+AUTHOR_NAME = "Mauricio Ramírez"
 
 
 st.set_page_config(
@@ -40,8 +46,12 @@ def load_json(path):
     if not path.exists():
         return None
 
-    with path.open("r", encoding="utf-8") as file:
-        return json.load(file)
+    try:
+        with path.open("r", encoding="utf-8") as file:
+            return json.load(file)
+    except (json.JSONDecodeError, OSError) as exc:
+        st.warning(f"Could not read report {path.name}: {exc}")
+        return None
 
 
 def display_status(value):
@@ -60,16 +70,36 @@ def display_status(value):
     return status
 
 
+def run_validation():
+    """Run the consolidated validation pipeline."""
+    try:
+        return subprocess.run(
+            [sys.executable, "src/run_validation.py"],
+            cwd=PROJECT_ROOT,
+            capture_output=True,
+            text=True,
+            timeout=600,
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        return None, "Validation timed out after 600 seconds."
+    except OSError as exc:
+        return None, f"{type(exc).__name__}: {exc}"
+
+
+def format_validation_details(details):
+    """Normalize validation details for display."""
+    if isinstance(details, (dict, list)):
+        return json.dumps(details, indent=2, ensure_ascii=False)
+
+    return str(details) if details else ""
+
+
 # ============================================================
 # LOAD REPORTS
 # ============================================================
 
 report = load_json(REPORT_FILE)
-
-if report is None:
-    st.error(f"Migration quality report not found: {REPORT_FILE}")
-    st.stop()
-
 scale_report = load_json(SCALE_REPORT_FILE)
 incremental_report = load_json(INCREMENTAL_REPORT_FILE)
 gx_report = load_json(GX_REPORT_FILE)
@@ -80,7 +110,39 @@ gx_report = load_json(GX_REPORT_FILE)
 # ============================================================
 
 st.title("🧪 NetOps Migration Quality Dashboard")
-st.caption("Automated Data Migration & Transformation Validation")
+st.caption(
+    "Automated Data Migration, Reconciliation & Transformation Validation"
+)
+
+st.write(
+    "Run the consolidated quality gate to execute Pytest and Great "
+    "Expectations, then refresh the dashboard with the latest reports."
+)
+
+if st.button("🔄 Run Validations & Refresh Dashboard", type="primary"):
+    with st.spinner("Running Pytest and Great Expectations..."):
+        result = run_validation()
+
+    if isinstance(result, tuple):
+        st.error(result[1])
+    else:
+        if result.returncode == 0:
+            st.success("All validations passed.")
+        else:
+            st.error(
+                "The quality gate failed. The latest validation report "
+                "will still be loaded so you can inspect the failures."
+            )
+
+        if result.stdout:
+            with st.expander("View validation execution output"):
+                st.code(result.stdout, language="text")
+
+        if result.stderr:
+            with st.expander("View validation warnings and errors"):
+                st.code(result.stderr, language="text")
+
+    st.rerun()
 
 st.divider()
 
@@ -91,62 +153,153 @@ st.divider()
 
 st.header("📊 General Migration Quality")
 
-total = report["total_validations"]
-passed = report["passed"]
-failed = report["failed"]
-overall_status = report["overall_status"]
+if report is None:
+    st.error(f"Migration quality report not found: {REPORT_FILE}")
+    st.info("Run the validation pipeline using the button above.")
+else:
+    total = report.get("total_validations", 0)
+    passed = report.get("passed", 0)
+    failed = report.get("failed", 0)
+    overall_status = report.get("overall_status", "UNKNOWN")
+    quality_score = report.get(
+        "quality_score",
+        (passed / total * 100) if total else 0,
+    )
 
-quality_score = (passed / total * 100) if total > 0 else 0
+    col1, col2, col3, col4, col5 = st.columns(5)
 
-col1, col2, col3, col4, col5 = st.columns(5)
+    with col1:
+        st.metric("Total Validations", total)
 
-with col1:
-    st.metric("Total Validations", total)
+    with col2:
+        st.metric("Passed", passed)
 
-with col2:
-    st.metric("Passed", passed)
+    with col3:
+        st.metric("Failed", failed)
 
-with col3:
-    st.metric("Failed", failed)
+    with col4:
+        st.metric("Overall Status", display_status(overall_status))
 
-with col4:
-    st.metric("Overall Status", display_status(overall_status))
+    with col5:
+        st.metric("Quality Score", f"{quality_score:.2f}%")
 
-with col5:
-    st.metric("Quality Score", f"{quality_score:.0f}%")
+    # --------------------------------------------------------
+    # Validator summaries
+    # --------------------------------------------------------
+    st.subheader("Validator Summary")
 
-st.subheader("Validation Summary")
+    summaries = report.get("validator_summaries", {})
+    summary_columns = st.columns(max(len(summaries), 1))
 
-chart_data = pd.DataFrame(
-    {
-        "Status": ["Passed", "Failed"],
-        "Count": [passed, failed],
-    }
-)
+    for column, (validator_name, summary) in zip(
+        summary_columns, summaries.items()
+    ):
+        with column:
+            st.metric(
+                f"{validator_name} Status",
+                display_status(summary.get("status", "UNKNOWN")),
+            )
+            st.caption(
+                f"{summary.get('passed', 0)} passed · "
+                f"{summary.get('failed', 0)} failed · "
+                f"{summary.get('total', 0)} total"
+            )
 
-st.bar_chart(chart_data.set_index("Status"))
+    # --------------------------------------------------------
+    # Validation chart
+    # --------------------------------------------------------
+    st.subheader("Validation Summary")
 
-st.subheader("Validation Results")
+    chart_data = pd.DataFrame(
+        {
+            "Status": ["Passed", "Failed"],
+            "Count": [passed, failed],
+        }
+    )
 
-validation_data = pd.DataFrame(report.get("validations", []))
+    st.bar_chart(chart_data.set_index("Status"))
 
-if not validation_data.empty:
-    if "status" in validation_data.columns:
-        validation_data["status"] = validation_data["status"].map(
-            display_status
+    # --------------------------------------------------------
+    # Consolidated validation results
+    # --------------------------------------------------------
+    st.subheader("Validation Results")
+
+    validation_data = pd.DataFrame(report.get("validations", []))
+
+    if not validation_data.empty:
+        if "status" in validation_data.columns:
+            validation_data["status"] = validation_data["status"].map(
+                display_status
+            )
+
+        preferred_columns = [
+            "name",
+            "validator",
+            "table",
+            "column",
+            "records_evaluated",
+            "unexpected_values",
+            "status",
+        ]
+
+        visible_columns = [
+            column
+            for column in preferred_columns
+            if column in validation_data.columns
+        ]
+
+        st.dataframe(
+            validation_data[visible_columns],
+            use_container_width=True,
+            hide_index=True,
         )
 
-    st.dataframe(
-        validation_data,
-        use_container_width=True,
-        hide_index=True,
-    )
-else:
-    st.info("No general validation results are available.")
+        failed_validations = [
+            item
+            for item in report.get("validations", [])
+            if str(item.get("status", "")).upper() in {"FAIL", "FAILED", "ERROR"}
+        ]
 
-st.caption(
-    f"Execution timestamp: {report.get('execution_timestamp', 'N/A')}"
-)
+        if failed_validations:
+            st.subheader("❌ Failure Details")
+
+            for index, item in enumerate(failed_validations, start=1):
+                title = (
+                    f"{index}. {item.get('validator', 'Validator')} — "
+                    f"{item.get('name', 'Unknown validation')}"
+                )
+
+                with st.expander(title, expanded=True):
+                    if item.get("table"):
+                        st.write(f"**Table:** `{item['table']}`")
+
+                    if item.get("column"):
+                        st.write(f"**Column:** `{item['column']}`")
+
+                    if item.get("records_evaluated") is not None:
+                        st.write(
+                            f"**Records evaluated:** "
+                            f"{item['records_evaluated']:,}"
+                        )
+
+                    if item.get("unexpected_values") is not None:
+                        st.write(
+                            f"**Unexpected values:** "
+                            f"{item['unexpected_values']:,}"
+                        )
+
+                    details = format_validation_details(item.get("details"))
+
+                    if details:
+                        st.code(details, language="text")
+                    else:
+                        st.write("No additional failure details were recorded.")
+    else:
+        st.info("No general validation results are available.")
+
+    st.caption(
+        f"Execution timestamp: {report.get('execution_timestamp', 'N/A')}"
+    )
 
 
 # ============================================================
@@ -204,12 +357,7 @@ if scale_report:
     )
 
     st.subheader("Scale Validation Results")
-
-    st.dataframe(
-        scale_data,
-        use_container_width=True,
-        hide_index=True,
-    )
+    st.dataframe(scale_data, use_container_width=True, hide_index=True)
 else:
     st.info("The 1-million-record scale validation report is not available.")
 
@@ -230,7 +378,6 @@ if incremental_report:
     count_validation = validations.get("record_count_reconciliation", {})
     referential_validation = validations.get("referential_integrity", {})
 
-    # Use the actual report fields; do not assume expected_delta exists.
     source_records = delta_validation.get("source_records", 0)
     target_records = delta_validation.get("target_records", 0)
     processed_records = delta_validation.get("processed_records", 0)
@@ -292,11 +439,11 @@ else:
 
 
 # ============================================================
-# 4. GREAT EXPECTATIONS — DATA QUALITY
+# 4. GREAT EXPECTATIONS
 # ============================================================
 
 st.divider()
-st.header("🛡️ Great Expectations — Data Quality")
+st.header("🛡️ Great Expectations")
 
 if gx_report:
     gx_stats = gx_report.get("statistics", {})
@@ -308,7 +455,7 @@ if gx_report:
     gx_failed = gx_stats.get("unsuccessful_expectations", 0)
     gx_score = gx_stats.get("success_percent", 0)
 
-    st.caption(f"Table validated: `{gx_report.get('table', 'N/A')}`")
+    st.caption(f"Tables validated: `{gx_report.get('table', 'N/A')}`")
 
     col1, col2, col3, col4 = st.columns(4)
 
@@ -322,7 +469,37 @@ if gx_report:
         st.metric("Expectations Passed", gx_passed)
 
     with col4:
-        st.metric("Quality Score", f"{gx_score:.0f}%")
+        st.metric("Quality Score", f"{gx_score:.2f}%")
+
+    table_results = gx_report.get("table_results", {})
+
+    if table_results:
+        st.subheader("Results by Table")
+
+        table_summary = pd.DataFrame(
+            [
+                {
+                    "Table": table_name,
+                    "Status": display_status(table_result.get("success", False)),
+                    "Evaluated": table_result.get("statistics", {}).get(
+                        "evaluated_expectations", 0
+                    ),
+                    "Passed": table_result.get("statistics", {}).get(
+                        "successful_expectations", 0
+                    ),
+                    "Failed": table_result.get("statistics", {}).get(
+                        "unsuccessful_expectations", 0
+                    ),
+                }
+                for table_name, table_result in table_results.items()
+            ]
+        )
+
+        st.dataframe(
+            table_summary,
+            use_container_width=True,
+            hide_index=True,
+        )
 
     st.subheader("Expectation Results")
 
@@ -333,6 +510,7 @@ if gx_report:
 
         gx_expectations = gx_expectations.rename(
             columns={
+                "table": "Table",
                 "expectation_type": "Expectation",
                 "column": "Column",
                 "element_count": "Records Evaluated",
@@ -343,6 +521,7 @@ if gx_report:
         display_columns = [
             column
             for column in [
+                "Table",
                 "Expectation",
                 "Column",
                 "Records Evaluated",
@@ -375,15 +554,10 @@ if gx_report:
             mime="text/html",
         )
     else:
-        st.warning(
-            "Great Expectations HTML report not found. "
-            "Run `python src/validate_with_gx.py` to generate it."
-        )
+        st.info("The Great Expectations HTML report is not available.")
 else:
-    st.info(
-        "Great Expectations report is not available yet. "
-        "Run `python src/validate_with_gx.py` first."
-    )
+    st.info("The Great Expectations JSON report is not available.")
+
 
 # ============================================================
 # 5. AI-POWERED MIGRATION ANALYSIS
@@ -421,11 +595,15 @@ if st.session_state.get("migration_ai_analysis"):
 
 
 # ============================================================
-# FOOTER
+# FOOTER / COPYRIGHT
 # ============================================================
 
 st.divider()
 st.caption(
-    "NetOps Migration QA | Data Reconciliation · Data Quality · "
-    "Incremental Validation · Scale Testing · Great Expectations"
+    f"© {COPYRIGHT_YEAR} {PROJECT_NAME} | "
+    f"Developed by {AUTHOR_NAME}. All rights reserved."
+)
+st.caption(
+    "Data Reconciliation · Data Quality · Incremental Validation · "
+    "Scale Testing · Great Expectations · AI-assisted Analysis"
 )
