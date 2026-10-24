@@ -1,3 +1,4 @@
+
 name: Data Migration Validation
 
 on:
@@ -10,7 +11,6 @@ on:
 
 jobs:
   data-validation:
-
     runs-on: ubuntu-latest
 
     services:
@@ -29,7 +29,6 @@ jobs:
           --health-retries 5
 
     steps:
-
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -41,7 +40,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install pytest psycopg[binary] pytest-json-report
+          pip install pytest "psycopg[binary]" pytest-json-report great-expectations==1.24.0
 
       - name: Initialize database
         env:
@@ -56,7 +55,18 @@ jobs:
             -d netops_qa \
             -f sql/init_database.sql
 
-      - name: Run data migration validations
+      - name: Introduce intentional duplicate for demonstration
+        env:
+          PGPASSWORD: netops_password
+        run: |
+          psql \
+            -h localhost \
+            -p 5432 \
+            -U netops_admin \
+            -d netops_qa \
+            -c "INSERT INTO source_system.customers_staging (customer_id, first_name, last_name, email, status, created_at) VALUES (100001, 'Mauricio', 'Ramirez', 'mauricio@example.com', 'ACTIVE', '2026-01-10 09:15:00');"
+
+      - name: Run Pytest and Great Expectations demonstrations
         env:
           DB_HOST: localhost
           DB_PORT: 5432
@@ -64,7 +74,24 @@ jobs:
           DB_USER: netops_admin
           DB_PASSWORD: netops_password
         run: |
+          set +e
+
+          echo "===== PYTEST VALIDATION ====="
           pytest -v
+          pytest_status=$?
+
+          echo "===== GREAT EXPECTATIONS VALIDATION ====="
+          python src/demo_bug_with_gx.py
+          gx_status=$?
+
+          echo "===== VALIDATION SUMMARY ====="
+          echo "Pytest exit code: $pytest_status"
+          echo "Great Expectations exit code: $gx_status"
+
+          if [ "$pytest_status" -ne 0 ] || [ "$gx_status" -ne 0 ]; then
+            echo "Intentional demonstration: data quality defect detected."
+            exit 1
+          fi
 
       - name: Generate 1M synthetic records
         run: |
