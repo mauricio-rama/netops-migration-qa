@@ -2,6 +2,13 @@
 import json
 from pathlib import Path
 
+import sys
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
 import pandas as pd
 import streamlit as st
 
@@ -377,6 +384,40 @@ else:
         "Great Expectations report is not available yet. "
         "Run `python src/validate_with_gx.py` first."
     )
+
+# ============================================================
+# 5. AI-POWERED MIGRATION ANALYSIS
+# ============================================================
+
+st.divider()
+st.header("🤖 AI-Powered Migration Analysis")
+
+st.write(
+    "Use Gemini AI and the MCP server to analyze the latest "
+    "migration and data-quality reports."
+)
+
+if st.button("🔍 Analyze with AI", type="primary"):
+    with st.spinner("Gemini is analyzing migration reports through MCP..."):
+        try:
+            from agents.gemini_agent import analyze_migration
+
+            analysis = analyze_migration()
+
+            st.session_state["migration_ai_analysis"] = analysis
+            st.session_state["migration_ai_error"] = None
+
+        except Exception as exc:
+            st.session_state["migration_ai_error"] = (
+                f"{type(exc).__name__}: {exc}"
+            )
+
+if st.session_state.get("migration_ai_error"):
+    st.error(st.session_state["migration_ai_error"])
+
+if st.session_state.get("migration_ai_analysis"):
+    st.subheader("AI Analysis Results")
+    st.markdown(st.session_state["migration_ai_analysis"])
 
 
 # ============================================================
